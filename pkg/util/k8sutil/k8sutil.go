@@ -13,7 +13,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policybeta1 "k8s.io/api/policy/v1beta1"
 	apiextclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	apiextbeta1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 	appsv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
@@ -42,7 +42,7 @@ type KubernetesClient struct {
 	appsv1.StatefulSetsGetter
 	rbacv1beta1.RoleBindingsGetter
 	policyv1beta1.PodDisruptionBudgetsGetter
-	apiextbeta1.CustomResourceDefinitionsGetter
+	apiextv1.CustomResourceDefinitionsGetter
 	clientbatchv1beta1.CronJobsGetter
 
 	RESTClient      rest.Interface
@@ -112,7 +112,7 @@ func NewFromConfig(cfg *rest.Config) (KubernetesClient, error) {
 		return kubeClient, fmt.Errorf("could not create api client:%v", err)
 	}
 
-	kubeClient.CustomResourceDefinitionsGetter = apiextClient.ApiextensionsV1beta1()
+	kubeClient.CustomResourceDefinitionsGetter = apiextClient.ApiextensionsV1()
 	kubeClient.AcidV1ClientSet = acidv1client.NewForConfigOrDie(cfg)
 
 	return kubeClient, nil
