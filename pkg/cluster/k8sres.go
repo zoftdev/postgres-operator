@@ -7,6 +7,7 @@ import (
 	"path"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -714,17 +715,6 @@ func (c *Cluster) generateSpiloPodEnvVars(uid types.UID, spiloConfiguration stri
 	if spiloConfiguration != "" {
 		envVars = append(envVars, v1.EnvVar{Name: "SPILO_CONFIGURATION", Value: spiloConfiguration})
 	}
-	if c.OpConfig.WALES3Bucket != "" {
-		envVars = append(envVars, v1.EnvVar{Name: "WAL_S3_BUCKET", Value: c.OpConfig.WALES3Bucket})
-		envVars = append(envVars, v1.EnvVar{Name: "WAL_BUCKET_SCOPE_SUFFIX", Value: getBucketScopeSuffix(string(uid))})
-		envVars = append(envVars, v1.EnvVar{Name: "WAL_BUCKET_SCOPE_PREFIX", Value: ""})
-	}
-
-	if c.OpConfig.LogS3Bucket != "" {
-		envVars = append(envVars, v1.EnvVar{Name: "LOG_S3_BUCKET", Value: c.OpConfig.LogS3Bucket})
-		envVars = append(envVars, v1.EnvVar{Name: "LOG_BUCKET_SCOPE_SUFFIX", Value: getBucketScopeSuffix(string(uid))})
-		envVars = append(envVars, v1.EnvVar{Name: "LOG_BUCKET_SCOPE_PREFIX", Value: ""})
-	}
 
 	if c.patroniUsesKubernetes() {
 		envVars = append(envVars, v1.EnvVar{Name: "DCS_ENABLE_KUBERNETES_API", Value: "true"})
@@ -744,8 +734,22 @@ func (c *Cluster) generateSpiloPodEnvVars(uid types.UID, spiloConfiguration stri
 		envVars = append(envVars, c.generateStandbyEnvironment(standbyDescription)...)
 	}
 
+	// add vars taken from pod_environment_configmap and pod_environment_secret first
+	// (to allow them to override the globals set in the operator config)
 	if len(customPodEnvVarsList) > 0 {
 		envVars = append(envVars, customPodEnvVarsList...)
+	}
+
+	if c.OpConfig.WALES3Bucket != "" {
+		envVars = append(envVars, v1.EnvVar{Name: "WAL_S3_BUCKET", Value: c.OpConfig.WALES3Bucket})
+		envVars = append(envVars, v1.EnvVar{Name: "WAL_BUCKET_SCOPE_SUFFIX", Value: getBucketScopeSuffix(string(uid))})
+		envVars = append(envVars, v1.EnvVar{Name: "WAL_BUCKET_SCOPE_PREFIX", Value: ""})
+	}
+
+	if c.OpConfig.LogS3Bucket != "" {
+		envVars = append(envVars, v1.EnvVar{Name: "LOG_S3_BUCKET", Value: c.OpConfig.LogS3Bucket})
+		envVars = append(envVars, v1.EnvVar{Name: "LOG_BUCKET_SCOPE_SUFFIX", Value: getBucketScopeSuffix(string(uid))})
+		envVars = append(envVars, v1.EnvVar{Name: "LOG_BUCKET_SCOPE_PREFIX", Value: ""})
 	}
 
 	return envVars
@@ -766,8 +770,15 @@ func deduplicateEnvVars(input []v1.EnvVar, containerName string, logger *logrus.
 			result = append(result, input[i])
 		} else if names[va.Name] == 1 {
 			names[va.Name]++
-			logger.Warningf("variable %q is defined in %q more than once, the subsequent definitions are ignored",
-				va.Name, containerName)
+
+			// Some variables (those to configure the WAL_ and LOG_ shipping) may be overriden, only log as info
+			if strings.HasPrefix(va.Name, "WAL_") || strings.HasPrefix(va.Name, "LOG_") {
+				logger.Infof("global variable %q has been overwritten by configmap/secret for container %q",
+					va.Name, containerName)
+			} else {
+				logger.Warningf("variable %q is defined in %q more than once, the subsequent definitions are ignored",
+					va.Name, containerName)
+			}
 		}
 	}
 	return result
