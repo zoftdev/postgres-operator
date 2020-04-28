@@ -953,11 +953,41 @@ func (c *Cluster) generateStatefulSet(spec *acidv1.PostgresSpec) (*appsv1.Statef
 			}
 		}
 		for k, v := range cm.Data {
+			c.logger.Infof("Adding key %s from PodEnvironmentConfigMap %s to customPodEnvVars", k, c.OpConfig.PodEnvironmentSecret)
 			customPodEnvVarsList = append(customPodEnvVarsList, v1.EnvVar{Name: k, Value: v})
 		}
 		sort.Slice(customPodEnvVarsList,
 			func(i, j int) bool { return customPodEnvVarsList[i].Name < customPodEnvVarsList[j].Name })
 	}
+
+	// Like with PodEnvironmentConfigMap but with a referenced Secret
+	// To protect the values of the secret we use references here though
+	if c.OpConfig.PodEnvironmentSecret != "" {
+		var secret *v1.Secret
+		secret, err = c.KubeClient.Secrets(c.Namespace).Get(
+			context.TODO(),
+			c.OpConfig.PodEnvironmentSecret,
+			metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("could not read PodEnvironmentSecret: %v", err)
+		}
+
+		for k := range secret.Data {
+			c.logger.Infof("Adding key %s from PodEnvironmentSecret %s to customPodEnvVars", k, c.OpConfig.PodEnvironmentSecret)
+			customPodEnvVarsList = append(customPodEnvVarsList,
+				v1.EnvVar{Name: k, ValueFrom: &v1.EnvVarSource{
+					SecretKeyRef: &v1.SecretKeySelector{
+						LocalObjectReference: v1.LocalObjectReference{
+							Name: c.OpConfig.PodEnvironmentSecret,
+						},
+						Key: k,
+					},
+				}})
+		}
+		sort.Slice(customPodEnvVarsList,
+			func(i, j int) bool { return customPodEnvVarsList[i].Name < customPodEnvVarsList[j].Name })
+	}
+
 	if spec.StandbyCluster != nil && spec.StandbyCluster.S3WalPath == "" {
 		return nil, fmt.Errorf("s3_wal_path is empty for standby cluster")
 	}
