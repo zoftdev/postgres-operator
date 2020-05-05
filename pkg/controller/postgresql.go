@@ -497,7 +497,11 @@ func (c *Controller) postgresqlAdd(obj interface{}) {
 func (c *Controller) postgresqlUpdate(prev, cur interface{}) {
 	pgOld := c.postgresqlCheck(prev)
 	pgNew := c.postgresqlCheck(cur)
-	if pgOld != nil && pgNew != nil {
+
+	// has this cluster been marked as deleted already, then we shall start cleaning up
+	if pgNew != nil && !pgNew.ObjectMeta.DeletionTimestamp.IsZero() {
+		c.queueClusterEvent(pgNew, nil, EventDelete)
+	} else if pgOld != nil && pgNew != nil {
 		// Avoid the inifinite recursion for status updates
 		if reflect.DeepEqual(pgOld.Spec, pgNew.Spec) {
 			if reflect.DeepEqual(pgNew.Annotations, pgOld.Annotations) {
