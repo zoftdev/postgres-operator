@@ -191,7 +191,7 @@ func (c *Cluster) deleteConnectionPooler() (err error) {
 		Deployments(c.Namespace).
 		Delete(context.TODO(), deploymentName, options)
 
-	if !k8sutil.ResourceNotFound(err) {
+	if k8sutil.ResourceNotFound(err) {
 		c.logger.Debugf("Connection pooler deployment was already deleted")
 	} else if err != nil {
 		return fmt.Errorf("could not delete deployment: %v", err)
@@ -213,7 +213,7 @@ func (c *Cluster) deleteConnectionPooler() (err error) {
 		Services(c.Namespace).
 		Delete(context.TODO(), serviceName, options)
 
-	if !k8sutil.ResourceNotFound(err) {
+	if k8sutil.ResourceNotFound(err) {
 		c.logger.Debugf("Connection pooler service was already deleted")
 	} else if err != nil {
 		return fmt.Errorf("could not delete service: %v", err)
@@ -476,9 +476,12 @@ func (c *Cluster) deleteStatefulSet() error {
 	}
 
 	err := c.KubeClient.StatefulSets(c.Statefulset.Namespace).Delete(context.TODO(), c.Statefulset.Name, c.deleteOptions)
-	if err != nil {
+	if k8sutil.ResourceNotFound(err) {
+		c.logger.Debugf("StatefulSet was already deleted")
+	} else if err != nil {
 		return err
 	}
+
 	c.logger.Infof("statefulset %q has been deleted", util.NameFromMeta(c.Statefulset.ObjectMeta))
 	c.Statefulset = nil
 
@@ -576,7 +579,11 @@ func (c *Cluster) deleteService(role PostgresRole) error {
 	}
 
 	if err := c.KubeClient.Services(c.Services[role].Namespace).Delete(context.TODO(), c.Services[role].Name, c.deleteOptions); err != nil {
-		return err
+		if k8sutil.ResourceNotFound(err) {
+			c.logger.Debugf("Service was already deleted")
+		} else if err != nil {
+			return err
+		}
 	}
 
 	c.logger.Infof("%s service %q has been deleted", role, util.NameFromMeta(c.Services[role].ObjectMeta))
@@ -681,9 +688,12 @@ func (c *Cluster) deletePodDisruptionBudget() error {
 	err := c.KubeClient.
 		PodDisruptionBudgets(c.PodDisruptionBudget.Namespace).
 		Delete(context.TODO(), c.PodDisruptionBudget.Name, c.deleteOptions)
-	if err != nil {
-		return fmt.Errorf("could not delete pod disruption budget: %v", err)
+	if k8sutil.ResourceNotFound(err) {
+		c.logger.Debugf("PodDisruptionBudget was already deleted")
+	} else if err != nil {
+		return fmt.Errorf("could not delete PodDisruptionBudget: %v", err)
 	}
+
 	c.logger.Infof("pod disruption budget %q has been deleted", util.NameFromMeta(c.PodDisruptionBudget.ObjectMeta))
 	c.PodDisruptionBudget = nil
 
@@ -712,9 +722,12 @@ func (c *Cluster) deleteEndpoint(role PostgresRole) error {
 		return fmt.Errorf("there is no %s endpoint in the cluster", role)
 	}
 
-	if err := c.KubeClient.Endpoints(c.Endpoints[role].Namespace).Delete(
-		context.TODO(), c.Endpoints[role].Name, c.deleteOptions); err != nil {
-		return fmt.Errorf("could not delete endpoint: %v", err)
+	if err := c.KubeClient.Endpoints(c.Endpoints[role].Namespace).Delete(context.TODO(), c.Endpoints[role].Name, c.deleteOptions); err != nil {
+		if k8sutil.ResourceNotFound(err) {
+			c.logger.Debugf("Endpoint was already deleted")
+		} else if err != nil {
+			return fmt.Errorf("could not delete endpoint: %v", err)
+		}
 	}
 
 	c.logger.Infof("endpoint %q has been deleted", util.NameFromMeta(c.Endpoints[role].ObjectMeta))
@@ -727,13 +740,15 @@ func (c *Cluster) deleteSecret(secret *v1.Secret) error {
 	c.setProcessName("deleting secret %q", util.NameFromMeta(secret.ObjectMeta))
 	c.logger.Debugf("deleting secret %q", util.NameFromMeta(secret.ObjectMeta))
 	err := c.KubeClient.Secrets(secret.Namespace).Delete(context.TODO(), secret.Name, c.deleteOptions)
-	if err != nil {
+	if k8sutil.ResourceNotFound(err) {
+		c.logger.Debugf("Secret was already deleted")
+	} else if err != nil {
 		return err
 	}
 	c.logger.Infof("secret %q has been deleted", util.NameFromMeta(secret.ObjectMeta))
 	delete(c.Secrets, secret.UID)
 
-	return err
+	return nil
 }
 
 func (c *Cluster) createRoles() (err error) {
@@ -786,7 +801,14 @@ func (c *Cluster) deleteLogicalBackupJob() error {
 
 	c.logger.Info("removing the logical backup job")
 
-	return c.KubeClient.CronJobsGetter.CronJobs(c.Namespace).Delete(context.TODO(), c.getLogicalBackupJobName(), c.deleteOptions)
+	err := c.KubeClient.CronJobsGetter.CronJobs(c.Namespace).Delete(context.TODO(), c.getLogicalBackupJobName(), c.deleteOptions)
+	if k8sutil.ResourceNotFound(err) {
+		c.logger.Debugf("LogicalBackup CronJob was already deleted")
+	} else if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // GetServiceMaster returns cluster's kubernetes master Service
