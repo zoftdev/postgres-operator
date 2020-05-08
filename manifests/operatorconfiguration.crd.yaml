@@ -105,6 +105,8 @@ spec:
                   type: boolean
                 enable_sidecars:
                   type: boolean
+                share_pg_socket_with_sidecars:
+                  type: boolean
                 infrastructure_roles_secret_name:
                   type: string
                 inherited_labels:
